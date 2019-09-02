@@ -22,7 +22,7 @@
 
 -on_load(load_nif/0).
 
--export([open/2, conv/2, conv/3]).
+-export([open/2, conv_native/2, conv/2, conv/3]).
 
 -opaque cd() :: binary().
 -export_type([cd/0]).
@@ -31,17 +31,35 @@
 %% API
 %% -------------------------------------------------------------------------
 
--spec open(string(), string()) -> cd().
+-spec open(string(), string()) -> {{string(), string()}, cd()}.
 open(_To, _From) ->
     erlang:nif_error(not_loaded).
 
--spec conv(cd(), binary()) -> {ok, binary()} | {error, atom()}.
-conv(_CD, _Binary) ->
+-spec conv_native({{string(), string()}, cd()}, binary()) -> {ok, binary()} | {eilseq, binary()} | {error, atom()}.
+conv_native(_CD, _Binary) ->
     erlang:nif_error(not_loaded).
+
+-spec conv({{string(), string()}, cd()}, binary()) -> {ok, binary()} | {error, atom()}.
+conv({Inc, CD}, Binary) ->
+    {To, _From} = Inc,
+    case conv_native(CD, Binary) of
+        {ok, Encoded} -> {ok, Encoded};
+        {eilseq, Encoded} -> 
+                Modified = lists:suffix("IGNORE", To) or lists:suffix("TRANSLIT", To),
+                case Modified of
+                    true -> {ok, Encoded};
+                    _ -> {error, eilseq}
+                end;
+        Other -> Other 
+    end
+.
 
 -spec conv(string(), string(), binary()) -> {ok, binary()} | {error, atom()}.
 conv(To, From, Binary) ->
-    conv(open(To, From), Binary).
+    CD = open(To, From),
+    conv(CD, Binary)
+.
+
 
 %% -------------------------------------------------------------------------
 %% on_load callback

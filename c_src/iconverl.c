@@ -100,11 +100,11 @@ erl_iconv_open(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
     result = enif_make_resource(env, cd);
     enif_release_resource(cd);
 
-    return result;
+	return enif_make_tuple2(env, enif_make_tuple2(env, argv[0], argv[1]), result);
 }
 
 static ERL_NIF_TERM
-erl_iconv(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
+erl_iconv_native(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 {
     ErlNifBinary orig_bin, conv_bin;
     size_t inleft, outleft, outsize;
@@ -149,14 +149,22 @@ erl_iconv(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
             out = conv_bin.data + (outsize - outleft);
         } else {
-            enif_release_binary(&conv_bin);
 
-            if      (errno == EILSEQ) { error = iconverl_atoms.eilseq;   }
+            if (errno == EILSEQ) 
+            {
+                error = iconverl_atoms.eilseq;
+                rc = 0;
+            }
             else if (errno == EINVAL) { error = iconverl_atoms.einval;   }
-            else                      { error = iconverl_atoms.eunknown; }
+			else if (errno == 11) { rc = 0; } // means it was TRANSLIT requested. and the message was actually converted.
+			else { error = iconverl_atoms.eunknown; }
 
-            return enif_make_tuple2(env, iconverl_atoms.error, error);
-        }
+            if (rc != 0)
+            {
+                enif_release_binary(&conv_bin);
+                return enif_make_tuple2(env, iconverl_atoms.error, error);
+            }
+       }
     } while (rc != 0);
 
     if (outleft > 0)
@@ -164,12 +172,15 @@ erl_iconv(ErlNifEnv *env, int argc, const ERL_NIF_TERM argv[])
 
     result = enif_make_binary(env, &conv_bin);
 
-    return enif_make_tuple2(env, iconverl_atoms.ok, result);
+	if(error == iconverl_atoms.eilseq)
+		return enif_make_tuple2(env, iconverl_atoms.eilseq, result);
+	else
+        return enif_make_tuple2(env, iconverl_atoms.ok, result);
 }
 
 static ErlNifFunc nif_funcs[] = {
     {"open", 2, erl_iconv_open},
-    {"conv", 2, erl_iconv}
+    {"conv_native", 2, erl_iconv_native}
 };
 
 ERL_NIF_INIT(iconverl, nif_funcs, load, NULL, upgrade, NULL)
