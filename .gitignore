@@ -1,4 +1,5 @@
 ebin
+_build
 c_src/*.o
 priv/*.so
 .eunit
